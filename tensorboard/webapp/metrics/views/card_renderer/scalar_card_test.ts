@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 import {OverlayContainer} from '@angular/cdk/overlay';
 import {
+  ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
   EventEmitter,
@@ -30,7 +31,7 @@ import {
   TestBed,
   tick,
 } from '@angular/core/testing';
-import {MatDialogModule, MAT_DIALOG_DATA} from '@angular/material/dialog';
+import {MAT_DIALOG_DATA, MatDialogModule} from '@angular/material/dialog';
 import {MatMenuModule} from '@angular/material/menu';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {By} from '@angular/platform-browser';
@@ -40,10 +41,16 @@ import {MockStore} from '@ngrx/store/testing';
 import {Observable, of, ReplaySubject} from 'rxjs';
 import {State} from '../../../app_state';
 import {ExperimentAlias} from '../../../experiments/types';
+import * as hparamsActions from '../../../hparams/_redux/hparams_actions';
+import * as hparamsSelectors from '../../../hparams/_redux/hparams_selectors';
+import {HparamFilter} from '../../../hparams/_redux/types';
+import * as runsSelectors from '../../../runs/store/runs_selectors';
 import {Run} from '../../../runs/store/runs_types';
 import {buildRun} from '../../../runs/store/testing';
 import * as selectors from '../../../selectors';
+import {getIsScalarColumnContextMenusEnabled} from '../../../selectors';
 import {MatIconTestingModule} from '../../../testing/mat_icon_module';
+import {provideMockTbStore} from '../../../testing/utils';
 import {DataLoadState} from '../../../types/data';
 import {CardFobComponent} from '../../../widgets/card_fob/card_fob_component';
 import {
@@ -55,8 +62,23 @@ import {
   TimeSelectionAffordance,
   TimeSelectionToggleAffordance,
 } from '../../../widgets/card_fob/card_fob_types';
+import {ContentCellComponent} from '../../../widgets/data_table/content_cell_component';
+import {ContentRowComponent} from '../../../widgets/data_table/content_row_component';
 import {DataTableComponent} from '../../../widgets/data_table/data_table_component';
 import {DataTableModule} from '../../../widgets/data_table/data_table_module';
+import {HeaderCellComponent} from '../../../widgets/data_table/header_cell_component';
+import {
+  AddColumnEvent,
+  ColumnHeader,
+  ColumnHeaderType,
+  DataTableMode,
+  DomainType,
+  FilterAddedEvent,
+  IntervalFilter,
+  ReorderColumnEvent,
+  Side,
+  SortingOrder,
+} from '../../../widgets/data_table/types';
 import {ExperimentAliasModule} from '../../../widgets/experiment_alias/experiment_alias_module';
 import {IntersectionObserverTestingModule} from '../../../widgets/intersection_observer/intersection_observer_testing_module';
 import {
@@ -64,6 +86,7 @@ import {
   relativeTimeFormatter,
   siNumberFormatter,
 } from '../../../widgets/line_chart_v2/lib/formatter';
+import {Extent} from '../../../widgets/line_chart_v2/lib/public_types';
 import {
   DataSeries,
   DataSeriesMetadataMap,
@@ -76,13 +99,13 @@ import {ResizeDetectorTestingModule} from '../../../widgets/resize_detector_test
 import {TruncatedPathModule} from '../../../widgets/text/truncated_path_module';
 import {
   cardViewBoxChanged,
-  metricsCardFullSizeToggled,
-  metricsCardStateUpdated,
-  stepSelectorToggled,
-  timeSelectionChanged,
-  metricsSlideoutMenuOpened,
   dataTableColumnOrderChanged,
   dataTableColumnToggled,
+  metricsCardFullSizeToggled,
+  metricsCardStateUpdated,
+  metricsSlideoutMenuOpened,
+  stepSelectorToggled,
+  timeSelectionChanged,
 } from '../../actions';
 import {PluginType} from '../../data_source';
 import {
@@ -104,6 +127,7 @@ import {
   provideMockCardRunToSeriesData,
 } from '../../testing';
 import {TooltipSort, XAxisType} from '../../types';
+import * as commonSelectors from '../main_view/common_selectors';
 import {ScalarCardComponent} from './scalar_card_component';
 import {ScalarCardContainer} from './scalar_card_container';
 import {ScalarCardDataTable} from './scalar_card_data_table';
@@ -113,32 +137,10 @@ import {
   ScalarCardSeriesMetadata,
   SeriesType,
 } from './scalar_card_types';
-import {
-  AddColumnEvent,
-  ColumnHeader,
-  ColumnHeaderType,
-  DataTableMode,
-  DomainType,
-  FilterAddedEvent,
-  IntervalFilter,
-  ReorderColumnEvent,
-  Side,
-  SortingOrder,
-} from '../../../widgets/data_table/types';
 import {VisLinkedTimeSelectionWarningModule} from './vis_linked_time_selection_warning_module';
-import {Extent} from '../../../widgets/line_chart_v2/lib/public_types';
-import {provideMockTbStore} from '../../../testing/utils';
-import * as commonSelectors from '../main_view/common_selectors';
-import {ContentCellComponent} from '../../../widgets/data_table/content_cell_component';
-import {ContentRowComponent} from '../../../widgets/data_table/content_row_component';
-import {HeaderCellComponent} from '../../../widgets/data_table/header_cell_component';
-import {HparamFilter} from '../../../hparams/_redux/types';
-import * as hparamsSelectors from '../../../hparams/_redux/hparams_selectors';
-import * as hparamsActions from '../../../hparams/_redux/hparams_actions';
-import * as runsSelectors from '../../../runs/store/runs_selectors';
-import {getIsScalarColumnContextMenusEnabled} from '../../../selectors';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.Default,
   standalone: false,
   selector: 'line-chart',
   template: `
@@ -223,6 +225,7 @@ class TestableLineChart {
 // DataDownloadContainer pulls in entire redux and, for this test, we don't want to
 // know about their data requirements.
 @Component({
+  changeDetection: ChangeDetectionStrategy.Default,
   standalone: false,
   selector: 'testable-data-download-dialog',
   template: `{{ cardId }}`,
@@ -408,7 +411,8 @@ describe('scalar card', () => {
     store.overrideSelector(selectors.getMetricsCardUserViewBox, null);
 
     dispatchedActions = [];
-    spyOn(store, 'dispatch').and.callFake((action: Action) => {
+    // Cast to jasmine.Spy for compatibility between NgRx dispatch signature overloads.
+    (spyOn(store, 'dispatch') as jasmine.Spy).and.callFake((action: Action) => {
       dispatchedActions.push(action);
     });
   });
@@ -1885,6 +1889,107 @@ describe('scalar card', () => {
         ['', 'world', '-500', '1,000', anyString, anyString],
       ]);
     }));
+
+    describe('tooltip item limiting and legend', () => {
+      const colors = [
+        '#00f',
+        '#0f0',
+        '#f00',
+        '#ff0',
+        '#0ff',
+        '#f0f',
+        '#fff',
+        '#000',
+      ];
+
+      function buildTooltipData(count: number) {
+        return Array.from({length: count}, (_, i) =>
+          buildTooltipDatum({
+            id: `row${i + 1}`,
+            type: SeriesType.ORIGINAL,
+            displayName: `Row ${i + 1}`,
+            alias: null,
+            visible: true,
+            color: colors[i % colors.length],
+          })
+        );
+      }
+
+      function getLegendRow(fixture: ComponentFixture<ScalarCardContainer>) {
+        return fixture.debugElement.query(By.css('table.tooltip tr.legend'));
+      }
+
+      it('displays all items when there are 5 or fewer', fakeAsync(() => {
+        store.overrideSelector(selectors.getMetricsScalarSmoothing, 0);
+        const fixture = createComponent('card1');
+        setTooltipData(fixture, buildTooltipData(5));
+        fixture.detectChanges();
+
+        expect(fixture.debugElement.queryAll(Selector.TOOLTIP_ROW).length).toBe(
+          5
+        );
+        expect(getLegendRow(fixture)).toBeNull();
+      }));
+
+      it('limits tooltip to 5 items when there are more than 5', fakeAsync(() => {
+        store.overrideSelector(selectors.getMetricsScalarSmoothing, 0);
+        const fixture = createComponent('card1');
+        setTooltipData(fixture, buildTooltipData(7));
+        fixture.detectChanges();
+
+        expect(fixture.debugElement.queryAll(Selector.TOOLTIP_ROW).length).toBe(
+          5
+        );
+      }));
+
+      it('shows legend with singular text for 1 additional item', fakeAsync(() => {
+        store.overrideSelector(selectors.getMetricsScalarSmoothing, 0);
+        const fixture = createComponent('card1');
+        setTooltipData(fixture, buildTooltipData(6));
+        fixture.detectChanges();
+
+        const legendRow = getLegendRow(fixture);
+        expect(legendRow).not.toBeNull();
+        expect(legendRow.nativeElement.textContent.trim()).toBe(
+          '1 additional item'
+        );
+      }));
+
+      it('shows legend with plural text for multiple additional items', fakeAsync(() => {
+        store.overrideSelector(selectors.getMetricsScalarSmoothing, 0);
+        const fixture = createComponent('card1');
+        setTooltipData(fixture, buildTooltipData(8));
+        fixture.detectChanges();
+
+        const legendRow = getLegendRow(fixture);
+        expect(legendRow).not.toBeNull();
+        expect(legendRow.nativeElement.textContent.trim()).toBe(
+          '3 additional items'
+        );
+      }));
+
+      it('does not show legend when there are exactly 5 items', fakeAsync(() => {
+        store.overrideSelector(selectors.getMetricsScalarSmoothing, 0);
+        const fixture = createComponent('card1');
+        setTooltipData(fixture, buildTooltipData(5));
+        fixture.detectChanges();
+
+        expect(getLegendRow(fixture)).toBeNull();
+      }));
+
+      it('shows legend with correct colspan when smoothing is enabled', fakeAsync(() => {
+        store.overrideSelector(selectors.getMetricsScalarSmoothing, 0.5);
+        const fixture = createComponent('card1');
+        setTooltipData(fixture, buildTooltipData(6));
+        fixture.detectChanges();
+
+        const legendRow = getLegendRow(fixture);
+        expect(legendRow).not.toBeNull();
+        expect(
+          legendRow.query(By.css('td')).nativeElement.getAttribute('colspan')
+        ).toBe('100');
+      }));
+    });
   });
 
   describe('non-monotonic increase in x-axis', () => {

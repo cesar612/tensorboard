@@ -1,12 +1,12 @@
 # Description:
 # TensorBoard, a dashboard for investigating TensorFlow
 
-load("//tensorboard/defs:py_repl.bzl", "py_repl")
-load("//tensorboard/defs:web.bzl", "tf_web_library")
-load("//tensorboard/defs:zipper.bzl", "tensorboard_zip_file")
 load("@rules_python//python:py_binary.bzl", "py_binary")
 load("@rules_python//python:py_library.bzl", "py_library")
 load("@rules_python//python:py_test.bzl", "py_test")
+load("//tensorboard/defs:py_repl.bzl", "py_repl")
+load("//tensorboard/defs:web.bzl", "tf_web_library")
+load("//tensorboard/defs:zipper.bzl", "tensorboard_zip_file")
 
 package(default_visibility = [":internal"])
 
@@ -211,10 +211,13 @@ py_library(
 
 py_test(
     name = "manager_test",
-    size = "small",
+    size = "large",
     srcs = ["manager_test.py"],
     srcs_version = "PY3",
-    tags = ["support_notf"],
+    tags = [
+        "exclusive",
+        "support_notf",
+    ],
     visibility = ["//tensorboard:internal"],
     deps = [
         ":manager",
@@ -273,10 +276,13 @@ py_library(
 
 py_test(
     name = "program_test",
-    size = "small",
+    size = "large",
     srcs = ["program_test.py"],
     srcs_version = "PY3",
-    tags = ["support_notf"],
+    tags = [
+        "exclusive",
+        "support_notf",
+    ],
     deps = [
         ":default",
         ":program",
@@ -303,7 +309,6 @@ py_library(
     srcs = ["default.py"],
     srcs_version = "PY3",
     deps = [
-        "//tensorboard:expect_pkg_resources_installed",
         "//tensorboard/backend:experimental_plugin",
         "//tensorboard/plugins/audio:audio_plugin",
         "//tensorboard/plugins/core:core_plugin",
@@ -341,7 +346,6 @@ py_test(
     deps = [
         ":default",
         ":test",
-        "//tensorboard:expect_pkg_resources_installed",
         "//tensorboard/plugins:base_plugin",
     ],
 )
@@ -361,7 +365,7 @@ py_test(
     deps = [
         ":test",
         ":version",
-        "//tensorboard:expect_pkg_resources_installed",
+        "//tensorboard:expect_packaging_installed",
     ],
 )
 
@@ -455,10 +459,10 @@ py_library(name = "expect_absl_logging_installed")
 # `pip install absl-py`
 py_library(name = "expect_absl_testing_absltest_installed")
 
-# This is a dummy rule used as a pkg-resources dependency in open-source.
-# We expect pkg-resources to already be installed on the system, e.g., via
-# `pip install setuptools`.
-py_library(name = "expect_pkg_resources_installed")
+# This is a dummy rule used as a packaging dependency in open-source.
+# We expect packaging to already be installed on the system, e.g. via
+# `pip install packaging`.
+py_library(name = "expect_packaging_installed")
 
 # This is a dummy rule used as a pandas dependency in open-source.
 # We expect pandas to already be installed on the system, e.g. via
